@@ -74,7 +74,8 @@ class BLEService {
 
   private connectionCallbacks: Set<ConnectionCallback> = new Set();
   private responseResolver: ((value: DataView) => void) | null = null;
-  private progressCallback: ProgressCallback | null = null;
+  // @ts-ignore - Reserved for future use with ESP32 progress notifications
+  private _progressCallback: ProgressCallback | null = null;
 
   // GATT operation queue to prevent "GATT operation already in progress" errors
   private operationQueue: Promise<unknown> = Promise.resolve();
@@ -197,10 +198,9 @@ class BLEService {
 
     const code = value.getUint8(0);
 
-    // Handle progress updates during upload
-    if (code === RESP.PROGRESS && this.progressCallback) {
-      const offset = (value.getUint8(1) << 16) | (value.getUint8(2) << 8) | value.getUint8(3);
-      this.progressCallback(offset, 0); // Total will be tracked externally
+    // Ignore progress updates from ESP32 - we track progress locally
+    // ESP32 notifications can be delayed/out of order causing progress to jump
+    if (code === RESP.PROGRESS) {
       return;
     }
 
@@ -388,18 +388,18 @@ class BLEService {
 
     // Queue the entire upload operation to prevent GATT conflicts
     return this.queueOperation(async () => {
-      this.progressCallback = onProgress || null;
+      this._progressCallback = onProgress || null;
 
-      // Mobile needs different approach - writeWithoutResponse is more stable
+      // Mobile needs different approach
       const isMobile = this.isMobile();
       
-      // Mobile: smaller chunks, no response wait, MUCH longer delays
+      // Mobile: Use writeValue WITH ACK but very small chunks (20 bytes)
+      // Small chunks = fast ACK response = no timeout
       // The ESP32 writes to flash for each chunk which is slow (~10-20ms per write)
-      // If we send faster than it can write, packets are lost
-      const CHUNK_SIZE = isMobile ? 64 : 256;
-      const CHUNK_DELAY = isMobile ? 80 : 10;   // Must wait for flash write!
-      const BATCH_SIZE = isMobile ? 8 : 50;     // Frequent pauses
-      const BATCH_DELAY = isMobile ? 300 : 50;  // Let ESP32 breathe
+      const CHUNK_SIZE = isMobile ? 20 : 256;   // Very small on mobile for fast ACK
+      const CHUNK_DELAY = isMobile ? 25 : 10;   // Small delay after each ACK
+      const BATCH_SIZE = isMobile ? 50 : 50;    // Pause every N chunks
+      const BATCH_DELAY = isMobile ? 200 : 50;  // Let ESP32 breathe
       const MAX_RETRIES = 5;
 
       try {
@@ -427,21 +427,19 @@ class BLEService {
           
           while (retries < MAX_RETRIES && !success) {
             try {
-              // Use writeValueWithoutResponse on mobile - more stable
-              // But add longer delays to compensate for no ACK
-              if (isMobile) {
-                await this.imageDataChar!.writeValueWithoutResponse(chunk);
-              } else {
-                await this.imageDataChar!.writeValue(chunk);
-              }
+              // Always use writeValue (with ACK) for guaranteed delivery
+              // Small chunks on mobile ensure fast ACK response
+              await this.imageDataChar!.writeValue(chunk);
               success = true;
             } catch (writeError: any) {
               retries++;
               const errorMsg = writeError?.message || writeError?.toString() || 'Unknown error';
               console.log(`[BLE] Chunk write failed at offset ${offset}, retry ${retries}/${MAX_RETRIES}: ${errorMsg}`);
               
-              // Check if it's a disconnection
-              if (errorMsg.includes('disconnected') || errorMsg.includes('GATT')) {
+              // Check if it's a disconnection - abort immediately
+              if (errorMsg.toLowerCase().includes('disconnect') || 
+                  errorMsg.includes('GATT') ||
+                  errorMsg.toLowerCase().includes('not connected')) {
                 console.log(`[BLE] Connection lost, aborting upload`);
                 throw writeError;
               }
@@ -451,8 +449,8 @@ class BLEService {
                 throw writeError;
               }
               
-              // Wait before retry - longer on mobile
-              const waitTime = (isMobile ? 800 : 300) * retries;
+              // Wait before retry
+              const waitTime = (isMobile ? 500 : 300) * retries;
               console.log(`[BLE] Waiting ${waitTime}ms before retry...`);
               await new Promise(resolve => setTimeout(resolve, waitTime));
             }
@@ -493,7 +491,7 @@ class BLEService {
         }
         throw error;
       } finally {
-        this.progressCallback = null;
+        this._progressCallback = null;
       }
     });
   }

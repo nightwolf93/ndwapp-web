@@ -6,6 +6,7 @@ import {
   Upload as UploadIcon,
   Settings as SettingsIcon,
   RefreshCw,
+  XCircle,
 } from 'lucide-react';
 import { Button } from './ui';
 import { Gallery } from './Gallery';
@@ -29,6 +30,13 @@ interface DeviceScreenProps {
   onDisconnect: () => void;
 }
 
+// Upload error info
+interface UploadError {
+  message: string;
+  progress: number;
+  timestamp: number;
+}
+
 export function DeviceScreen({
   device: _device,
   isConnected,
@@ -41,7 +49,13 @@ export function DeviceScreen({
 }: DeviceScreenProps) {
   const [activeTab, setActiveTab] = useState<Tab>('gallery');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [uploadError, setUploadError] = useState<UploadError | null>(null);
   const { success, error } = useToast();
+
+  // Clear upload error
+  const clearUploadError = useCallback(() => {
+    setUploadError(null);
+  }, []);
 
   // Refresh device data
   const handleRefresh = useCallback(async () => {
@@ -64,32 +78,68 @@ export function DeviceScreen({
     }
   }, [isConnected, error]);
 
-  // Upload handlers
+  // Upload handlers with detailed error tracking
   const handleUpload = useCallback(async (
     name: string,
     data: Uint8Array,
     onProgress: (sent: number, total: number) => void
   ): Promise<boolean> => {
+    setUploadError(null);
+    let lastProgress = 0;
+    
+    const trackProgress = (sent: number, total: number) => {
+      lastProgress = Math.round((sent / total) * 100);
+      onProgress(sent, total);
+    };
+
     try {
-      const result = await bleService.uploadImage(name, data, onProgress);
+      const result = await bleService.uploadImage(name, data, trackProgress);
       if (result) {
         await handleRefresh();
         success(`"${name}" uploaded`);
       }
       return result;
-    } catch (err) {
-      error('Upload failed');
+    } catch (err: any) {
+      const errorMsg = err?.message || err?.toString() || 'Unknown error';
+      
+      // Determine user-friendly error message
+      let friendlyMessage = 'Upload failed';
+      if (errorMsg.toLowerCase().includes('disconnect')) {
+        friendlyMessage = 'Connection lost during upload';
+      } else if (errorMsg.includes('GATT')) {
+        friendlyMessage = 'Bluetooth communication error';
+      } else if (errorMsg.toLowerCase().includes('timeout')) {
+        friendlyMessage = 'Upload timed out';
+      } else if (errorMsg.toLowerCase().includes('not connected')) {
+        friendlyMessage = 'Device disconnected';
+      }
+      
+      setUploadError({
+        message: friendlyMessage,
+        progress: lastProgress,
+        timestamp: Date.now(),
+      });
+      
+      console.error('[Upload] Failed:', errorMsg);
       return false;
     }
-  }, [handleRefresh, success, error]);
+  }, [handleRefresh, success]);
 
   const handleUploadAndDisplay = useCallback(async (
     name: string,
     data: Uint8Array,
     onProgress: (sent: number, total: number) => void
   ): Promise<boolean> => {
+    setUploadError(null);
+    let lastProgress = 0;
+    
+    const trackProgress = (sent: number, total: number) => {
+      lastProgress = Math.round((sent / total) * 100);
+      onProgress(sent, total);
+    };
+
     try {
-      const uploadResult = await bleService.uploadImage(name, data, onProgress);
+      const uploadResult = await bleService.uploadImage(name, data, trackProgress);
       if (uploadResult) {
         await bleService.displayImage(name);
         await handleRefresh();
@@ -97,11 +147,30 @@ export function DeviceScreen({
         return true;
       }
       return false;
-    } catch (err) {
-      error('Upload failed');
+    } catch (err: any) {
+      const errorMsg = err?.message || err?.toString() || 'Unknown error';
+      
+      let friendlyMessage = 'Upload failed';
+      if (errorMsg.toLowerCase().includes('disconnect')) {
+        friendlyMessage = 'Connection lost during upload';
+      } else if (errorMsg.includes('GATT')) {
+        friendlyMessage = 'Bluetooth communication error';
+      } else if (errorMsg.toLowerCase().includes('timeout')) {
+        friendlyMessage = 'Upload timed out';
+      } else if (errorMsg.toLowerCase().includes('not connected')) {
+        friendlyMessage = 'Device disconnected';
+      }
+      
+      setUploadError({
+        message: friendlyMessage,
+        progress: lastProgress,
+        timestamp: Date.now(),
+      });
+      
+      console.error('[Upload] Failed:', errorMsg);
       return false;
     }
-  }, [handleRefresh, success, error]);
+  }, [handleRefresh, success]);
 
   // Gallery handlers
   const handleDisplay = useCallback(async (name: string): Promise<boolean> => {
@@ -196,23 +265,45 @@ export function DeviceScreen({
     }
   }, [success]);
 
-  // Not connected state
+  // Not connected state - with upload error display
   if (!isConnected && !isConnecting) {
     return (
       <div className="device-screen">
+        {/* Show upload error if it just happened */}
+        {uploadError && (Date.now() - uploadError.timestamp) < 60000 && (
+          <div className="upload-error-banner">
+            <div className="upload-error-icon">
+              <XCircle size={24} />
+            </div>
+            <div className="upload-error-content">
+              <div className="upload-error-title">{uploadError.message}</div>
+              <div className="upload-error-detail">
+                Upload stopped at {uploadError.progress}%
+              </div>
+            </div>
+            <button className="upload-error-close" onClick={clearUploadError}>
+              ×
+            </button>
+          </div>
+        )}
+
         <div className="connection-status error">
           <div className="connection-icon">
             <WifiOff size={20} />
           </div>
           <div className="connection-info">
-            <div className="connection-title">Not Connected</div>
+            <div className="connection-title">Disconnected</div>
             <div className="connection-subtitle">
-              Turn the device OFF then ON to make it available
+              {uploadError 
+                ? 'Connection was lost. Turn the device OFF then ON to reconnect.'
+                : 'Turn the device OFF then ON to make it available'
+              }
             </div>
           </div>
         </div>
+        
         <Button onClick={onConnect} size="lg" className="btn-full">
-          Connect
+          Reconnect
         </Button>
       </div>
     );
@@ -298,6 +389,8 @@ export function DeviceScreen({
           <Upload
             onUpload={handleUpload}
             onUploadAndDisplay={handleUploadAndDisplay}
+            uploadError={uploadError}
+            onClearError={clearUploadError}
           />
         )}
 

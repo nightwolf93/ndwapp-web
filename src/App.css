@@ -1037,3 +1037,75 @@
   gap: 0.5rem;
   margin-top: 1rem;
 }
+
+/* Upload Error Banner */
+.upload-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--destructive);
+  border-radius: var(--radius-lg);
+  margin-bottom: 0.5rem;
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.upload-error-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  background: rgba(239, 68, 68, 0.15);
+  border-radius: var(--radius);
+  color: var(--destructive);
+}
+
+.upload-error-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.upload-error-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--destructive);
+  margin-bottom: 0.25rem;
+}
+
+.upload-error-detail {
+  font-size: 0.8125rem;
+  color: var(--foreground-muted);
+}
+
+.upload-error-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--foreground-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.upload-error-close:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--destructive);
+}

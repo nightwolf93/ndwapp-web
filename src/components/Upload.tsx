@@ -6,6 +6,7 @@ import {
   Play,
   Monitor,
   Smartphone,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from './ui';
 import { Input } from './ui';
@@ -19,12 +20,20 @@ import {
 } from '../utils/imageProcessor';
 import type { ColorMode, Orientation, ProcessedImage } from '../utils/imageProcessor';
 
+interface UploadError {
+  message: string;
+  progress: number;
+  timestamp: number;
+}
+
 interface UploadProps {
   onUpload: (name: string, data: Uint8Array, onProgress: (sent: number, total: number) => void) => Promise<boolean>;
   onUploadAndDisplay: (name: string, data: Uint8Array, onProgress: (sent: number, total: number) => void) => Promise<boolean>;
+  uploadError?: UploadError | null;
+  onClearError?: () => void;
 }
 
-export function Upload({ onUpload, onUploadAndDisplay }: UploadProps) {
+export function Upload({ onUpload, onUploadAndDisplay, uploadError, onClearError }: UploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [loadedImage, setLoadedImage] = useState<HTMLImageElement | null>(null);
   const [processedImage, setProcessedImage] = useState<ProcessedImage | null>(null);
@@ -242,7 +251,27 @@ export function Upload({ onUpload, onUploadAndDisplay }: UploadProps) {
         {orientation === 'horizontal' ? '800 × 480' : '480 × 800'} px • {formatBytes(BUFFER_SIZE)}
       </p>
 
-      {/* Error */}
+      {/* Upload Error Banner (from failed upload) */}
+      {uploadError && (
+        <div className="upload-error-banner">
+          <div className="upload-error-icon">
+            <AlertTriangle size={20} />
+          </div>
+          <div className="upload-error-content">
+            <div className="upload-error-title">{uploadError.message}</div>
+            <div className="upload-error-detail">
+              Upload stopped at {uploadError.progress}%
+            </div>
+          </div>
+          {onClearError && (
+            <button className="upload-error-close" onClick={onClearError}>
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Local Error */}
       {error && (
         <div style={{ 
           padding: '0.75rem 1rem',
