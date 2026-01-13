@@ -1,13 +1,9 @@
 import { useState } from 'react';
 import {
-  HardDrive,
-  Image as ImageIcon,
-  Clock,
   RotateCcw,
   Moon,
   Minus,
   Plus,
-  AlertTriangle,
 } from 'lucide-react';
 import { Button } from './ui';
 import { Switch } from './ui';

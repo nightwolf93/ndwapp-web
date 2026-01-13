@@ -8,7 +8,6 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Button } from './ui';
-import { Badge } from './ui';
 import { Gallery } from './Gallery';
 import { Upload } from './Upload';
 import { Settings } from './Settings';
@@ -31,7 +30,6 @@ interface DeviceScreenProps {
 }
 
 export function DeviceScreen({
-  device,
   isConnected,
   isConnecting,
   deviceInfo,

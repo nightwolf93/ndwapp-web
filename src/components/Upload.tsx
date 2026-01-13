@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Upload as UploadIcon,
-  Image as ImageIcon,
   X,
   Save,
   Play,
