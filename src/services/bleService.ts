@@ -390,12 +390,15 @@ class BLEService {
     return this.queueOperation(async () => {
       this.progressCallback = onProgress || null;
 
-      // Mobile needs smaller chunks and longer delays for stable BLE
+      // Mobile needs different approach - writeWithoutResponse is more stable
       const isMobile = this.isMobile();
-      const CHUNK_SIZE = isMobile ? 128 : 256;
-      const CHUNK_DELAY = isMobile ? 30 : 10;
-      const BATCH_SIZE = isMobile ? 20 : 50; // Pause every N chunks
-      const BATCH_DELAY = isMobile ? 100 : 50;
+      
+      // Mobile: smaller chunks, no response wait, longer delays
+      // Desktop: larger chunks with response for reliability
+      const CHUNK_SIZE = isMobile ? 64 : 256;  // Even smaller on mobile
+      const CHUNK_DELAY = isMobile ? 50 : 10;  // Longer delay on mobile
+      const BATCH_SIZE = isMobile ? 10 : 50;   // More frequent pauses
+      const BATCH_DELAY = isMobile ? 200 : 50;
       const MAX_RETRIES = 5;
 
       try {
@@ -405,11 +408,14 @@ class BLEService {
           throw new Error('Failed to start upload');
         }
 
+        // Small delay after start command
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         let offset = 0;
         let chunkCount = 0;
         const totalChunks = Math.ceil(data.length / CHUNK_SIZE);
 
-        console.log(`[BLE] Starting upload: ${data.length} bytes in ${totalChunks} chunks (mobile: ${isMobile})`);
+        console.log(`[BLE] Starting upload: ${data.length} bytes in ${totalChunks} chunks (mobile: ${isMobile}, chunk: ${CHUNK_SIZE})`);
 
         while (offset < data.length) {
           const chunk = data.slice(offset, offset + CHUNK_SIZE);
@@ -420,8 +426,14 @@ class BLEService {
           
           while (retries < MAX_RETRIES && !success) {
             try {
-              // writeValue waits for acknowledgment from ESP32 - much more reliable
-              await this.imageDataChar!.writeValue(chunk);
+              if (isMobile) {
+                // Mobile: use writeValueWithoutResponse - doesn't wait for ACK
+                // This prevents timeout issues on mobile BLE stacks
+                await this.imageDataChar!.writeValueWithoutResponse(chunk);
+              } else {
+                // Desktop: use writeValue with response for reliability
+                await this.imageDataChar!.writeValue(chunk);
+              }
               success = true;
             } catch (writeError) {
               retries++;
@@ -432,7 +444,7 @@ class BLEService {
                 throw writeError;
               }
               
-              // Wait before retry - longer on mobile
+              // Wait before retry
               const waitTime = (isMobile ? 500 : 300) * retries;
               console.log(`[BLE] Waiting ${waitTime}ms before retry...`);
               await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -446,20 +458,21 @@ class BLEService {
             onProgress(offset, data.length);
           }
 
-          // Delay between chunks
+          // Delay between chunks - critical on mobile without ACK
           await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY));
 
-          // Extra pause every BATCH_SIZE chunks to let BLE stack breathe
+          // Extra pause every BATCH_SIZE chunks to let BLE stack and ESP32 breathe
           if (chunkCount % BATCH_SIZE === 0) {
-            console.log(`[BLE] Batch pause at ${Math.round((offset / data.length) * 100)}%`);
+            const percent = Math.round((offset / data.length) * 100);
+            console.log(`[BLE] Batch pause at ${percent}%`);
             await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
           }
         }
 
         console.log(`[BLE] Upload data sent: ${offset} bytes`);
 
-        // Longer delay before finishing on mobile
-        await new Promise(resolve => setTimeout(resolve, isMobile ? 300 : 100));
+        // Longer delay before finishing to let ESP32 process all data
+        await new Promise(resolve => setTimeout(resolve, isMobile ? 500 : 100));
 
         // Finish upload (use internal method since we're already in the queue)
         const finishResponse = await this.sendCommandInternal(CMD.FINISH_UPLOAD);
