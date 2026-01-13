@@ -371,6 +371,11 @@ class BLEService {
     return response.getUint8(0) === RESP.OK;
   }
 
+  // Detect if running on mobile
+  private isMobile(): boolean {
+    return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }
+
   // Upload image data
   async uploadImage(
     name: string,
@@ -385,6 +390,14 @@ class BLEService {
     return this.queueOperation(async () => {
       this.progressCallback = onProgress || null;
 
+      // Mobile needs smaller chunks and longer delays for stable BLE
+      const isMobile = this.isMobile();
+      const CHUNK_SIZE = isMobile ? 128 : 256;
+      const CHUNK_DELAY = isMobile ? 30 : 10;
+      const BATCH_SIZE = isMobile ? 20 : 50; // Pause every N chunks
+      const BATCH_DELAY = isMobile ? 100 : 50;
+      const MAX_RETRIES = 5;
+
       try {
         // Start upload (use internal method since we're already in the queue)
         const startResponse = await this.sendCommandInternal(CMD.START_UPLOAD, name);
@@ -392,13 +405,11 @@ class BLEService {
           throw new Error('Failed to start upload');
         }
 
-        // Send data in chunks using writeValue (with response) for reliable transfer
-        // The ESP32 will acknowledge each chunk before we send the next
-        const CHUNK_SIZE = 256; // Reasonable size with acknowledgment
-        const MAX_RETRIES = 3;
         let offset = 0;
+        let chunkCount = 0;
+        const totalChunks = Math.ceil(data.length / CHUNK_SIZE);
 
-        console.log(`[BLE] Starting upload: ${data.length} bytes in ${Math.ceil(data.length / CHUNK_SIZE)} chunks`);
+        console.log(`[BLE] Starting upload: ${data.length} bytes in ${totalChunks} chunks (mobile: ${isMobile})`);
 
         while (offset < data.length) {
           const chunk = data.slice(offset, offset + CHUNK_SIZE);
@@ -421,28 +432,34 @@ class BLEService {
                 throw writeError;
               }
               
-              // Wait before retry
-              const waitTime = 300 * retries;
+              // Wait before retry - longer on mobile
+              const waitTime = (isMobile ? 500 : 300) * retries;
               console.log(`[BLE] Waiting ${waitTime}ms before retry...`);
               await new Promise(resolve => setTimeout(resolve, waitTime));
             }
           }
           
           offset += chunk.length;
+          chunkCount++;
 
           if (onProgress) {
             onProgress(offset, data.length);
           }
 
-          // Small delay between chunks to avoid overwhelming the ESP32
-          await new Promise(resolve => setTimeout(resolve, 10));
+          // Delay between chunks
+          await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY));
+
+          // Extra pause every BATCH_SIZE chunks to let BLE stack breathe
+          if (chunkCount % BATCH_SIZE === 0) {
+            console.log(`[BLE] Batch pause at ${Math.round((offset / data.length) * 100)}%`);
+            await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+          }
         }
 
         console.log(`[BLE] Upload data sent: ${offset} bytes`);
 
-
-        // Small delay before finishing to let device process last chunks
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Longer delay before finishing on mobile
+        await new Promise(resolve => setTimeout(resolve, isMobile ? 300 : 100));
 
         // Finish upload (use internal method since we're already in the queue)
         const finishResponse = await this.sendCommandInternal(CMD.FINISH_UPLOAD);
