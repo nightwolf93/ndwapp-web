@@ -393,12 +393,13 @@ class BLEService {
       // Mobile needs different approach - writeWithoutResponse is more stable
       const isMobile = this.isMobile();
       
-      // Mobile: smaller chunks, no response wait, longer delays
-      // Desktop: larger chunks with response for reliability
-      const CHUNK_SIZE = isMobile ? 64 : 256;  // Even smaller on mobile
-      const CHUNK_DELAY = isMobile ? 50 : 10;  // Longer delay on mobile
-      const BATCH_SIZE = isMobile ? 10 : 50;   // More frequent pauses
-      const BATCH_DELAY = isMobile ? 200 : 50;
+      // Mobile: smaller chunks, no response wait, MUCH longer delays
+      // The ESP32 writes to flash for each chunk which is slow (~10-20ms per write)
+      // If we send faster than it can write, packets are lost
+      const CHUNK_SIZE = isMobile ? 64 : 256;
+      const CHUNK_DELAY = isMobile ? 80 : 10;   // Must wait for flash write!
+      const BATCH_SIZE = isMobile ? 8 : 50;     // Frequent pauses
+      const BATCH_DELAY = isMobile ? 300 : 50;  // Let ESP32 breathe
       const MAX_RETRIES = 5;
 
       try {
@@ -426,26 +427,32 @@ class BLEService {
           
           while (retries < MAX_RETRIES && !success) {
             try {
+              // Use writeValueWithoutResponse on mobile - more stable
+              // But add longer delays to compensate for no ACK
               if (isMobile) {
-                // Mobile: use writeValueWithoutResponse - doesn't wait for ACK
-                // This prevents timeout issues on mobile BLE stacks
                 await this.imageDataChar!.writeValueWithoutResponse(chunk);
               } else {
-                // Desktop: use writeValue with response for reliability
                 await this.imageDataChar!.writeValue(chunk);
               }
               success = true;
-            } catch (writeError) {
+            } catch (writeError: any) {
               retries++;
-              console.log(`[BLE] Chunk write failed at offset ${offset}, retry ${retries}/${MAX_RETRIES}:`, writeError);
+              const errorMsg = writeError?.message || writeError?.toString() || 'Unknown error';
+              console.log(`[BLE] Chunk write failed at offset ${offset}, retry ${retries}/${MAX_RETRIES}: ${errorMsg}`);
+              
+              // Check if it's a disconnection
+              if (errorMsg.includes('disconnected') || errorMsg.includes('GATT')) {
+                console.log(`[BLE] Connection lost, aborting upload`);
+                throw writeError;
+              }
               
               if (retries >= MAX_RETRIES) {
                 console.log(`[BLE] Upload failed after ${MAX_RETRIES} retries at offset ${offset}`);
                 throw writeError;
               }
               
-              // Wait before retry
-              const waitTime = (isMobile ? 500 : 300) * retries;
+              // Wait before retry - longer on mobile
+              const waitTime = (isMobile ? 800 : 300) * retries;
               console.log(`[BLE] Waiting ${waitTime}ms before retry...`);
               await new Promise(resolve => setTimeout(resolve, waitTime));
             }
