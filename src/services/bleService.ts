@@ -390,17 +390,16 @@ class BLEService {
     return this.queueOperation(async () => {
       this._progressCallback = onProgress || null;
 
-      // Mobile needs different approach
+      // Mobile needs different approach - Android Chrome BLE is very sensitive
       const isMobile = this.isMobile();
       
-      // Mobile: Use writeValue WITH ACK but very small chunks (20 bytes)
-      // Small chunks = fast ACK response = no timeout
-      // The ESP32 writes to flash for each chunk which is slow (~10-20ms per write)
-      const CHUNK_SIZE = isMobile ? 20 : 256;   // Very small on mobile for fast ACK
-      const CHUNK_DELAY = isMobile ? 25 : 10;   // Small delay after each ACK
-      const BATCH_SIZE = isMobile ? 50 : 50;    // Pause every N chunks
-      const BATCH_DELAY = isMobile ? 200 : 50;  // Let ESP32 breathe
-      const MAX_RETRIES = 5;
+      // Mobile: Larger chunks BUT much longer delays
+      // Android BLE stack gets overwhelmed by rapid operations
+      const CHUNK_SIZE = isMobile ? 128 : 256;   // Reasonable chunk size
+      const CHUNK_DELAY = isMobile ? 150 : 10;   // LONG delay between writes on mobile
+      const BATCH_SIZE = isMobile ? 10 : 50;     // Frequent pauses on mobile
+      const BATCH_DELAY = isMobile ? 500 : 50;   // Long breathing room
+      const MAX_RETRIES = 3;
 
       try {
         // Start upload (use internal method since we're already in the queue)
@@ -409,8 +408,8 @@ class BLEService {
           throw new Error('Failed to start upload');
         }
 
-        // Small delay after start command
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Longer delay after start command on mobile - let connection stabilize
+        await new Promise(resolve => setTimeout(resolve, isMobile ? 500 : 100));
 
         let offset = 0;
         let chunkCount = 0;
@@ -471,6 +470,11 @@ class BLEService {
             const percent = Math.round((offset / data.length) * 100);
             console.log(`[BLE] Batch pause at ${percent}%`);
             await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+            
+            // Check if we're still connected
+            if (!this.device?.gatt?.connected) {
+              throw new Error('Device disconnected during upload');
+            }
           }
         }
 
