@@ -1,0 +1,79 @@
+/* Switch Component */
+.switch-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.switch-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.switch-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.switch-description {
+  font-size: 0.8125rem;
+  color: var(--foreground-muted);
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-track {
+  width: 44px;
+  height: 24px;
+  background: var(--muted);
+  border-radius: var(--radius-full);
+  transition: background var(--transition-fast);
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: var(--foreground);
+  border-radius: 50%;
+  transition: transform var(--transition-fast);
+}
+
+.switch input:checked + .switch-track {
+  background: var(--primary);
+}
+
+.switch input:checked + .switch-track .switch-thumb {
+  transform: translateX(20px);
+  background: var(--primary-foreground);
+}
+
+.switch input:disabled + .switch-track {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

@@ -1,0 +1,34 @@
+/* Progress Component */
+.progress-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.progress {
+  flex: 1;
+  background: var(--muted);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+/* Sizes */
+.progress-sm { height: 4px; }
+.progress-md { height: 8px; }
+.progress-lg { height: 12px; }
+
+.progress-bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: inherit;
+  transition: width var(--transition-base);
+}
+
+.progress-value {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground-muted);
+  min-width: 3ch;
+  text-align: right;
+}

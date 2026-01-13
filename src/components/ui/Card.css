@@ -1,0 +1,49 @@
+/* Card Component */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.card-interactive {
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.card-interactive:hover {
+  background: var(--card-hover);
+  border-color: var(--border-hover);
+}
+
+.card-header {
+  padding: 1rem 1rem 0;
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 0.25rem;
+}
+
+.card-description {
+  font-size: 0.875rem;
+  color: var(--foreground-muted);
+}
+
+.card-content {
+  padding: 1rem;
+}
+
+.card-header + .card-content {
+  padding-top: 0.75rem;
+}
+
+.card-footer {
+  padding: 1rem;
+  padding-top: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
