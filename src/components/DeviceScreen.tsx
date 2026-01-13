@@ -30,6 +30,7 @@ interface DeviceScreenProps {
 }
 
 export function DeviceScreen({
+  device: _device,
   isConnected,
   isConnecting,
   deviceInfo,

@@ -170,6 +170,14 @@
   background: var(--muted);
   border-radius: var(--radius-md);
   color: var(--foreground-muted);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.device-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .device-info {
@@ -193,6 +201,75 @@
 
 .device-chevron {
   color: var(--foreground-subtle);
+}
+
+/* ==================== Device Type Selection ==================== */
+.device-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.device-type-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.device-type-icon {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--muted);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.device-type-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.device-type-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.device-type-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 0.25rem;
+}
+
+.device-type-desc {
+  font-size: 0.8125rem;
+  color: var(--foreground-muted);
+}
+
+.device-type-chevron {
+  color: var(--foreground-subtle);
+  flex-shrink: 0;
+}
+
+/* Scan device preview */
+.scan-device-preview {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.scan-device-preview img {
+  max-width: 180px;
+  max-height: 180px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgba(255, 255, 255, 0.1));
 }
 
 /* Empty state */

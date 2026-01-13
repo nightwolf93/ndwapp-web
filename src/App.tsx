@@ -4,7 +4,7 @@ import {
   BluetoothOff,
   Plus,
   ChevronLeft,
-  Frame,
+  ChevronRight,
   Scan,
   AlertTriangle,
   MoreVertical,
@@ -17,13 +17,34 @@ import { bleService } from './services/bleService';
 import { useDeviceStore, deviceStore, type PairedDevice } from './stores/deviceStore';
 import { DeviceScreen } from './components/DeviceScreen';
 import { ToastContainer, useToast } from './components/Toast';
+import eframeIcon from './assets/eframe_1.png';
 import './App.css';
 
-type Screen = 'devices' | 'scan' | 'device';
+// Device types available
+interface DeviceType {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  type: 'eink-frame';
+}
+
+const DEVICE_TYPES: DeviceType[] = [
+  {
+    id: 'eink-frame-one',
+    name: 'E-Ink Frame One',
+    description: '7.5" E-Paper Display • 800×480',
+    icon: eframeIcon,
+    type: 'eink-frame',
+  },
+];
+
+type Screen = 'devices' | 'select-type' | 'scan' | 'device';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('devices');
   const [selectedDevice, setSelectedDevice] = useState<PairedDevice | null>(null);
+  const [selectedDeviceType, setSelectedDeviceType] = useState<DeviceType | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState<PairedDevice | null>(null);
   
@@ -73,10 +94,17 @@ function App() {
     }
   }, [success, error]);
 
+  // Handle device type selection
+  const handleSelectDeviceType = useCallback((deviceType: DeviceType) => {
+    setSelectedDeviceType(deviceType);
+    setScreen('scan');
+  }, []);
+
   // Handle scan and pair
   const handleScan = useCallback(async () => {
+    if (!selectedDeviceType) return;
+    
     setIsScanning(true);
-    setScreen('scan');
     
     try {
       await bleService.connect();
@@ -85,8 +113,8 @@ function App() {
       const info = await bleService.getInfo();
       const newDevice: Omit<PairedDevice, 'addedAt'> = {
         id: `device-${Date.now()}`,
-        name: 'E-Ink Frame',
-        type: 'eink-frame',
+        name: selectedDeviceType.name,
+        type: selectedDeviceType.type,
       };
       
       deviceStore.addPairedDevice(newDevice);
@@ -107,11 +135,11 @@ function App() {
       success('Device paired successfully');
     } catch (err) {
       error('Could not connect. Turn the device OFF then ON.');
-      setScreen('devices');
+      setScreen('select-type');
     } finally {
       setIsScanning(false);
     }
-  }, [success, error]);
+  }, [selectedDeviceType, success, error]);
 
   // Handle disconnect
   const handleDisconnect = useCallback(async () => {
@@ -128,13 +156,25 @@ function App() {
 
   // Handle back navigation
   const handleBack = useCallback(async () => {
+    if (screen === 'scan') {
+      setScreen('select-type');
+      setIsScanning(false);
+      return;
+    }
+    
+    if (screen === 'select-type') {
+      setScreen('devices');
+      setSelectedDeviceType(null);
+      return;
+    }
+    
     if (store.isConnected) {
       await bleService.disconnect();
       deviceStore.resetConnection();
     }
     setSelectedDevice(null);
     setScreen('devices');
-  }, [store.isConnected]);
+  }, [screen, store.isConnected]);
 
   // Not supported screen
   if (!isSupported) {
@@ -172,18 +212,64 @@ function App() {
     );
   }
 
-  // Scan screen
-  if (screen === 'scan') {
+  // Device type selection screen
+  if (screen === 'select-type') {
     return (
       <div className="app">
         <header className="app-header">
           <div className="header-content">
             <div className="header-left">
-              <button className="header-back" onClick={() => setScreen('devices')}>
+              <button className="header-back" onClick={handleBack}>
                 <ChevronLeft size={20} />
               </button>
               <div>
                 <div className="header-title">Add Device</div>
+                <div className="header-subtitle">Select device type</div>
+              </div>
+            </div>
+          </div>
+        </header>
+        
+        <main className="app-content">
+          <div className="device-type-list">
+            {DEVICE_TYPES.map((deviceType, index) => (
+              <Card 
+                key={deviceType.id}
+                variant="interactive"
+                className={`device-type-card animate-slideUp stagger-${index + 1}`}
+                onClick={() => handleSelectDeviceType(deviceType)}
+              >
+                <div className="device-type-icon">
+                  <img src={deviceType.icon} alt={deviceType.name} />
+                </div>
+                <div className="device-type-info">
+                  <div className="device-type-name">{deviceType.name}</div>
+                  <div className="device-type-desc">{deviceType.description}</div>
+                </div>
+                <ChevronRight size={20} className="device-type-chevron" />
+              </Card>
+            ))}
+          </div>
+        </main>
+        
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
+      </div>
+    );
+  }
+
+  // Scan screen
+  if (screen === 'scan' && selectedDeviceType) {
+    return (
+      <div className="app">
+        <header className="app-header">
+          <div className="header-content">
+            <div className="header-left">
+              <button className="header-back" onClick={handleBack}>
+                <ChevronLeft size={20} />
+              </button>
+              <div>
+                <div className="header-title">{selectedDeviceType.name}</div>
+                <div className="header-subtitle">Pairing</div>
               </div>
             </div>
           </div>
@@ -191,11 +277,15 @@ function App() {
         
         <main className="app-content">
           <div className="scan-screen">
+            <div className="scan-device-preview">
+              <img src={selectedDeviceType.icon} alt={selectedDeviceType.name} />
+            </div>
+            
             <div className="scan-hint">
               <AlertTriangle size={20} className="scan-hint-icon" />
               <p>
-                Make sure your e-ink frame is powered ON. The device is only discoverable 
-                for 10 minutes after powering on.
+                Make sure your {selectedDeviceType.name} is powered ON. 
+                The device is only discoverable for 10 minutes after powering on.
               </p>
             </div>
             
@@ -205,14 +295,14 @@ function App() {
                   <Bluetooth size={24} />
                 </div>
                 <p style={{ color: 'var(--foreground-muted)' }}>Searching for devices...</p>
-                <Button variant="ghost" onClick={() => { setIsScanning(false); setScreen('devices'); }}>
+                <Button variant="ghost" onClick={() => { setIsScanning(false); }}>
                   Cancel
                 </Button>
               </div>
             ) : (
               <Button onClick={handleScan} className="btn-full" size="lg">
                 <Scan size={20} />
-                Scan for Devices
+                Scan for Device
               </Button>
             )}
           </div>
@@ -253,7 +343,7 @@ function App() {
         
         <main className="app-content has-bottom-nav">
           <DeviceScreen
-            device={selectedDevice}
+            device={selectedDevice as PairedDevice }
             isConnected={store.isConnected}
             isConnecting={store.isConnecting}
             deviceInfo={store.deviceInfo}
@@ -285,11 +375,11 @@ function App() {
         {store.pairedDevices.length === 0 ? (
           <div className="empty-state animate-fadeIn">
             <div className="empty-state-icon">
-              <Frame size={36} />
+              <img src={eframeIcon} alt="E-Ink Frame" style={{ width: 80, height: 80, objectFit: 'contain' }} />
             </div>
             <h2>No Devices</h2>
             <p>Add your first e-ink photo frame to get started.</p>
-            <Button onClick={handleScan} size="lg">
+            <Button onClick={() => setScreen('select-type')} size="lg">
               <Plus size={20} />
               Add Device
             </Button>
@@ -298,46 +388,53 @@ function App() {
           <>
             <div className="device-list-header">
               <h1>My Devices</h1>
-              <Button variant="outline" size="sm" onClick={handleScan}>
+              <Button variant="outline" size="sm" onClick={() => setScreen('select-type')}>
                 <Plus size={16} />
                 Add
               </Button>
             </div>
             
             <div className="device-list">
-              {store.pairedDevices.map((device, index) => (
-                <Card 
-                  key={device.id} 
-                  variant="interactive" 
-                  className={`device-card animate-slideUp stagger-${index + 1}`}
-                  onClick={() => handleOpenDevice(device)}
-                >
-                  <div className="device-icon">
-                    <Frame size={24} />
-                  </div>
-                  <div className="device-info">
-                    <div className="device-name">{device.name}</div>
-                    <div className="device-meta">
-                      <span>E-Ink Frame</span>
-                      {device.lastConnected && (
-                        <>
-                          <span>•</span>
-                          <span>Last used {formatTimeAgo(device.lastConnected)}</span>
-                        </>
+              {store.pairedDevices.map((device, index) => {
+                const deviceTypeInfo = DEVICE_TYPES.find(dt => dt.type === device.type);
+                return (
+                  <Card 
+                    key={device.id} 
+                    variant="interactive" 
+                    className={`device-card animate-slideUp stagger-${index + 1}`}
+                    onClick={() => handleOpenDevice(device)}
+                  >
+                    <div className="device-icon">
+                      {deviceTypeInfo ? (
+                        <img src={deviceTypeInfo.icon} alt={device.name} />
+                      ) : (
+                        <Bluetooth size={24} />
                       )}
                     </div>
-                  </div>
-                  <button 
-                    className="header-back"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowDeleteModal(device);
-                    }}
-                  >
-                    <MoreVertical size={18} />
-                  </button>
-                </Card>
-              ))}
+                    <div className="device-info">
+                      <div className="device-name">{device.name}</div>
+                      <div className="device-meta">
+                        <span>{deviceTypeInfo?.description || 'E-Ink Frame'}</span>
+                        {device.lastConnected && (
+                          <>
+                            <span>•</span>
+                            <span>{formatTimeAgo(device.lastConnected)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <button 
+                      className="header-back"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowDeleteModal(device);
+                      }}
+                    >
+                      <MoreVertical size={18} />
+                    </button>
+                  </Card>
+                );
+              })}
             </div>
           </>
         )}
